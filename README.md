@@ -1,5 +1,4 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/check-circle-2.svg" width="80" height="80" alt="DoIt Logo" />
   <h1 align="center">DoIt - Glassmorphic Todo App</h1>
   <p align="center">
     A premium, fully-featured, animated task management application built with specific focus on visual excellence, fluid motion design, and solid functional architecture.
