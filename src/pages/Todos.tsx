@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar, AlertCircle, Clock, PieChart as PieChartIcon, Edit2, Settings } from "lucide-react";
+import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar, AlertCircle, Clock, PieChart as PieChartIcon, Edit2, Settings, User, X } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { motion, AnimatePresence } from "framer-motion";
+import { hashPassword } from "../lib/hash";
 
 type Todo = {
   todo_id: string;
@@ -21,7 +22,7 @@ type Todo = {
 
 const CATEGORIES = ["Other", "Personal", "Work", "Shopping", "Food & Expense", "Health"];
 
-export default function Todos({ session, setSession }: { session: { userId: string; username: string }; setSession: (session: null) => void }) {
+export default function Todos({ session, setSession }: { session: { userId: string; username: string }; setSession: (session: { userId: string; username: string } | null) => void }) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -42,6 +43,88 @@ export default function Todos({ session, setSession }: { session: { userId: stri
        setSession(null);
     }
     setLoading(false);
+  };
+
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileData, setProfileData] = useState({ name: "", email: "", age: "", username: "" });
+  const [passwords, setPasswords] = useState({ current: "", newPass: "", confirm: "" });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileMessage, setProfileMessage] = useState({ type: "", text: "" });
+
+  const openProfile = async () => {
+    setShowProfile(true);
+    setProfileMessage({ type: "", text: "" });
+    setPasswords({ current: "", newPass: "", confirm: "" });
+    const { data } = await supabase.from('Users').select('*').eq('user_id', session.userId).single();
+    if (data) {
+        setProfileData({
+            name: data.name || "",
+            email: data.email || "",
+            age: data.age?.toString() || "",
+            username: data.username || ""
+        });
+    }
+  };
+
+  const updateProfileInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileLoading(true);
+    setProfileMessage({ type: "", text: "" });
+
+    const { error } = await supabase.from('Users').update({
+        name: profileData.name,
+        email: profileData.email,
+        age: profileData.age ? parseInt(profileData.age) : null,
+        username: profileData.username
+    }).eq('user_id', session.userId);
+
+    if (error) {
+        if (error.code === '23505') {
+            setProfileMessage({ type: "error", text: "Username already taken." });
+        } else {
+            setProfileMessage({ type: "error", text: error.message });
+        }
+    } else {
+        setProfileMessage({ type: "success", text: "Profile updated successfully!" });
+        setSession({ ...session, username: profileData.username });
+    }
+    setProfileLoading(false);
+  };
+
+  const updatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileLoading(true);
+    setProfileMessage({ type: "", text: "" });
+
+    if (passwords.newPass !== passwords.confirm) {
+        setProfileMessage({ type: "error", text: "New passwords do not match." });
+        setProfileLoading(false);
+        return;
+    }
+
+    const { data: user } = await supabase.from('Users').select('password_hash').eq('user_id', session.userId).single();
+    
+    if (user) {
+        const hashedCurrent = await hashPassword(passwords.current);
+        if (hashedCurrent !== user.password_hash) {
+            setProfileMessage({ type: "error", text: "Current password is incorrect." });
+            setProfileLoading(false);
+            return;
+        }
+
+        const hashedNew = await hashPassword(passwords.newPass);
+        const { error } = await supabase.from('Users').update({ password_hash: hashedNew }).eq('user_id', session.userId);
+
+        if (!error) {
+            setProfileMessage({ type: "success", text: "Password updated successfully!" });
+            setPasswords({ current: "", newPass: "", confirm: "" });
+        } else {
+            setProfileMessage({ type: "error", text: "Failed to update password." });
+        }
+    } else {
+        setProfileMessage({ type: "error", text: "User not found!" });
+    }
+    setProfileLoading(false);
   };
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -206,6 +289,10 @@ export default function Todos({ session, setSession }: { session: { userId: stri
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="glass border-border shadow-2xl min-w-[160px]">
+              <DropdownMenuItem onClick={openProfile} className="cursor-pointer text-foreground py-2 font-medium">
+                <User className="w-4 h-4 mr-2" />
+                Edit Profile
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={logout} className="cursor-pointer text-foreground py-2 font-medium">
                 <LogOut className="w-4 h-4 mr-2" />
                 Logout
@@ -606,6 +693,80 @@ export default function Todos({ session, setSession }: { session: { userId: stri
           </AnimatePresence>
         </motion.div>
       </div>
+
+      <AnimatePresence>
+        {showProfile && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }} 
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="glass p-6 rounded-2xl max-w-md w-full border border-primary/20 shadow-2xl relative z-[101] max-h-[90vh] overflow-y-auto"
+            >
+              <Button variant="ghost" size="icon" className="absolute top-4 right-4 text-muted-foreground hover:text-foreground" onClick={() => setShowProfile(false)}>
+                 <X className="w-5 h-5" />
+              </Button>
+
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><User className="w-5 h-5 text-primary"/> Profile Settings</h2>
+              
+              {profileMessage.text && (
+                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className={`p-3 rounded-lg mb-4 text-sm font-medium ${profileMessage.type === 'error' ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}`}>
+                    {profileMessage.text}
+                 </motion.div>
+              )}
+
+              <div className="space-y-6">
+                  <form onSubmit={updateProfileInfo} className="space-y-4">
+                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest border-b border-border pb-1">Personal Info</h3>
+                     <div className="space-y-2">
+                        <label className="text-xs font-medium">Full Name</label>
+                        <Input value={profileData.name} onChange={e => setProfileData({...profileData, name: e.target.value})} className="bg-background/40 h-9" />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-xs font-medium">Email Address</label>
+                        <Input value={profileData.email} type="email" onChange={e => setProfileData({...profileData, email: e.target.value})} className="bg-background/40 h-9" />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium">Age</label>
+                            <Input value={profileData.age} type="number" min="1" max="120" onChange={e => setProfileData({...profileData, age: e.target.value})} className="bg-background/40 h-9" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium">Username</label>
+                            <Input value={profileData.username} required onChange={e => setProfileData({...profileData, username: e.target.value})} className="bg-background/40 h-9" />
+                        </div>
+                     </div>
+                     <Button type="submit" disabled={profileLoading} className="w-full gap-2">
+                       {profileLoading ? "Saving..." : "Update Info"}
+                     </Button>
+                  </form>
+
+                  <form onSubmit={updatePassword} className="space-y-4 pt-2">
+                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest border-b border-border pb-1">Change Password</h3>
+                     <div className="space-y-2">
+                        <label className="text-xs font-medium">Current Password</label>
+                        <Input type="password" required value={passwords.current} onChange={e => setPasswords({...passwords, current: e.target.value})} className="bg-background/40 h-9" />
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium">New Password</label>
+                            <Input type="password" required minLength={6} value={passwords.newPass} onChange={e => setPasswords({...passwords, newPass: e.target.value})} className="bg-background/40 h-9" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium">Confirm New</label>
+                            <Input type="password" required minLength={6} value={passwords.confirm} onChange={e => setPasswords({...passwords, confirm: e.target.value})} className="bg-background/40 h-9" />
+                        </div>
+                     </div>
+                     <Button type="submit" variant="secondary" disabled={profileLoading} className="w-full border-input">
+                       {profileLoading ? "Verifying..." : "Update Password"}
+                     </Button>
+                  </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showDeleteConfirm && (
