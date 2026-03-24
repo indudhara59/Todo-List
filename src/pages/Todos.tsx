@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar } from "lucide-react";
+import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar, AlertCircle, Clock } from "lucide-react";
 
 type Todo = {
   todo_id: string;
@@ -27,6 +27,49 @@ export default function Todos({ session, setSession }: { session: { userId: stri
   const [newDueDate, setNewDueDate] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
   const [loading, setLoading] = useState(false);
+  const timeoutRefs = useRef<{ [key: string]: ReturnType<typeof setTimeout> }>({});
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    const now = new Date();
+    
+    Object.values(timeoutRefs.current).forEach(clearTimeout);
+    timeoutRefs.current = {};
+
+    todos.forEach((todo) => {
+      if (todo.due_date && !todo.status) {
+        const dueDate = new Date(todo.due_date);
+        const fiveMinutesInMs = 5 * 60 * 1000;
+        const notificationTime = dueDate.getTime() - fiveMinutesInMs;
+        const timeMs = notificationTime - now.getTime();
+        
+        if (timeMs > 0 && timeMs <= 2147483647) {
+          timeoutRefs.current[todo.todo_id] = setTimeout(() => {
+            if ("Notification" in window && Notification.permission === "granted") {
+              new Notification(`Due in 5 Minutes: ${todo.title}`, {
+                body: todo.description || "Your task is due in 5 minutes! Get ready."
+              });
+            }
+          }, timeMs);
+        }
+      }
+    });
+
+    return () => {
+      Object.values(timeoutRefs.current).forEach(clearTimeout);
+    };
+  }, [todos]);
 
   useEffect(() => {
     const fetchTodos = async () => {
@@ -48,10 +91,16 @@ export default function Todos({ session, setSession }: { session: { userId: stri
     e.preventDefault();
     if (!newTitle.trim()) return;
 
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
     setLoading(true);
+    const finalDueDate = newDueDate ? new Date(newDueDate).toISOString() : null;
+
     const { data, error } = await supabase
       .from('Todos')
-      .insert([{ user_id: session.userId, title: newTitle, description: newDesc, category: newCategory, due_date: newDueDate || null }])
+      .insert([{ user_id: session.userId, title: newTitle, description: newDesc, category: newCategory, due_date: finalDueDate }])
       .select();
 
     if (!error && data) {
@@ -229,53 +278,94 @@ export default function Todos({ session, setSession }: { session: { userId: stri
               <p className="text-muted-foreground text-sm">Add a task to get started on your journey.</p>
             </div>
           ) : (
-            <div className="grid gap-3 transition-all duration-300">
-              {todos
-                .filter(t => filterCategory === "All" || t.category === filterCategory)
-                .map(todo => (
-                <div key={todo.todo_id} className={`group flex items-start gap-3 p-4 glass rounded-xl border border-border transition-all duration-300 hover:border-primary/50 ${todo.status ? 'bg-background/20 opacity-70' : ''}`}>
-                  <div className="pt-0.5">
-                    <Checkbox 
-                      checked={todo.status}
-                      onCheckedChange={() => toggleTodo(todo.todo_id, todo.status)}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h4 className={`font-medium text-[15px] truncate transition-all duration-200 ${todo.status ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                        {todo.title}
-                      </h4>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-primary/10 text-primary border border-primary/20">
-                        <Tag className="w-3 h-3 mr-1" />
-                        {todo.category || 'Other'}
-                      </span>
-                      {todo.due_date && (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border ${
-                          new Date(todo.due_date) < new Date() && !todo.status 
-                            ? 'bg-destructive/10 text-destructive border-destructive/20' 
-                            : 'bg-muted/50 text-muted-foreground border-border'
-                        }`}>
-                          <Calendar className="w-3 h-3 mr-1" />
-                          {new Date(todo.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                        </span>
-                      )}
+            <div className="flex flex-col gap-8 transition-all duration-300">
+              {(() => {
+                const filtered = todos.filter(t => filterCategory === "All" || t.category === filterCategory);
+                const overdueTodos = filtered.filter(t => t.due_date && new Date(t.due_date) < currentTime && !t.status);
+                const regularTodos = filtered.filter(t => !(t.due_date && new Date(t.due_date) < currentTime && !t.status));
+
+                const renderTodo = (todo: Todo) => {
+                  const isOverdue = todo.due_date && new Date(todo.due_date) < currentTime && !todo.status;
+                  return (
+                    <div key={todo.todo_id} className={`group flex items-start gap-3 p-4 glass rounded-xl border transition-all duration-500 ${
+                      todo.status ? 'bg-background/20 opacity-70 border-border' : isOverdue ? 'bg-destructive/10 border-destructive/40 hover:border-destructive/60' : 'border-border hover:border-primary/50'
+                    }`}>
+                      <div className="pt-0.5">
+                        <Checkbox 
+                          checked={todo.status}
+                          onCheckedChange={() => toggleTodo(todo.todo_id, todo.status)}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <h4 className={`font-medium text-[15px] truncate transition-all duration-200 ${todo.status ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                            {todo.title}
+                          </h4>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-primary/10 text-primary border border-primary/20">
+                            <Tag className="w-3 h-3 mr-1" />
+                            {todo.category || 'Other'}
+                          </span>
+                          {todo.due_date && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border transition-all duration-500 ${
+                              isOverdue 
+                                ? 'bg-destructive/20 text-destructive border-destructive/30' 
+                                : 'bg-muted/50 text-muted-foreground border-border'
+                            }`}>
+                              <Calendar className="w-3 h-3 mr-1" />
+                              {new Date(todo.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          )}
+                        </div>
+                        {todo.description && (
+                          <p className={`text-sm mt-1 mb-0.5 line-clamp-2 transition-all ${todo.status ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground'}`}>
+                            {todo.description}
+                          </p>
+                        )}
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => deleteTodo(todo.todo_id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    {todo.description && (
-                      <p className={`text-sm mt-1 mb-0.5 line-clamp-2 transition-all ${todo.status ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground'}`}>
-                        {todo.description}
-                      </p>
+                  );
+                };
+
+                return (
+                  <>
+                    {overdueTodos.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="text-xs font-bold text-destructive flex items-center gap-2 uppercase tracking-widest ml-1">
+                          <AlertCircle className="w-4 h-4" /> Overdue Tasks
+                        </h3>
+                        <div className="grid gap-3">
+                          {overdueTodos.map(renderTodo)}
+                        </div>
+                      </div>
                     )}
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => deleteTodo(todo.todo_id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
+
+                    {regularTodos.length > 0 && (
+                      <div className="space-y-3">
+                        <h3 className="text-xs font-bold text-muted-foreground flex items-center gap-2 uppercase tracking-widest ml-1">
+                          <Clock className="w-4 h-4" /> Current Tasks
+                        </h3>
+                        <div className="grid gap-3">
+                          {regularTodos.map(renderTodo)}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {filtered.length === 0 && todos.length > 0 && (
+                      <div className="text-center p-8 text-muted-foreground text-sm glass rounded-xl border border-border">
+                        No tasks match the selected filter.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
