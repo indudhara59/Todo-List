@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar, AlertCircle, Clock } from "lucide-react";
+import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar, AlertCircle, Clock, PieChart as PieChartIcon } from "lucide-react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 
 type Todo = {
   todo_id: string;
@@ -29,6 +30,13 @@ export default function Todos({ session, setSession }: { session: { userId: stri
   const [loading, setLoading] = useState(false);
   const timeoutRefs = useRef<{ [key: string]: ReturnType<typeof setTimeout> }>({});
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const categoryData = CATEGORIES.map(cat => ({
+    name: cat,
+    value: todos.filter(t => t.category === cat).length
+  })).filter(c => c.value > 0);
+
+  const COLORS = ['#8b5cf6', '#d946ef', '#ec4899', '#f43f5e', '#f97316', '#0ea5e9', '#10b981', '#14b8a6', '#06b6d4'];
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -155,9 +163,9 @@ export default function Todos({ session, setSession }: { session: { userId: stri
         </div>
       </header>
 
-      <div className="grid md:grid-cols-[300px_1fr] gap-6 flex-1">
-        <div>
-          <Card className="glass sticky top-4">
+      <div className="grid md:grid-cols-[300px_1fr] gap-6 flex-1 items-start">
+        <div className="flex flex-col gap-6 sticky top-4">
+          <Card className="glass">
             <CardHeader>
               <CardTitle>New Task</CardTitle>
               <CardDescription>What needs to be done?</CardDescription>
@@ -241,6 +249,41 @@ export default function Todos({ session, setSession }: { session: { userId: stri
               </form>
             </CardContent>
           </Card>
+          
+          {todos.length > 0 && categoryData.length > 0 && (
+            <Card className="glass sticky top-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+                  <PieChartIcon className="w-4 h-4 text-primary" />
+                  Category Breakdown
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="h-[200px] flex items-center justify-center p-0 pb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={45}
+                      outerRadius={70}
+                      paddingAngle={5}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {categoryData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="opacity-90 hover:opacity-100 transition-opacity drop-shadow-md" />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", backgroundColor: "hsl(var(--background)/0.8)", backdropFilter: "blur(12px)", color: "hsl(var(--foreground))" }} 
+                      itemStyle={{ color: "hsl(var(--foreground))", fontWeight: "bold" }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-4">
