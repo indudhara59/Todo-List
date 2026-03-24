@@ -21,20 +21,20 @@ export default function Todos({ session, setSession }: { session: { userId: stri
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const fetchTodos = async () => {
+      const { data, error } = await supabase
+        .from('Todos')
+        .select('*')
+        .eq('user_id', session.userId)
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        setTodos(data);
+      }
+    };
+
     fetchTodos();
   }, [session.userId]);
-
-  const fetchTodos = async () => {
-    const { data, error } = await supabase
-      .from('Todos')
-      .select('*')
-      .eq('user_id', session.userId)
-      .order('created_at', { ascending: false });
-    
-    if (!error && data) {
-      setTodos(data);
-    }
-  };
 
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
