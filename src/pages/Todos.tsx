@@ -271,7 +271,7 @@ export default function Todos({ session, setSession }: { session: { userId: stri
                       dataKey="value"
                       stroke="none"
                     >
-                      {categoryData.map((entry, index) => (
+                      {categoryData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="opacity-90 hover:opacity-100 transition-opacity drop-shadow-md" />
                       ))}
                     </Pie>
