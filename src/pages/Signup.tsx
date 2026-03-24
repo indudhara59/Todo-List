@@ -8,6 +8,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 
 export default function Signup({ setSession }: { setSession: (user: { userId: string; username: string }) => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [age, setAge] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +26,13 @@ export default function Signup({ setSession }: { setSession: (user: { userId: st
       
       const { data, error } = await supabase
         .from('Users')
-        .insert([{ username, password_hash: hashedPw }])
+        .insert([{ 
+           username, 
+           password_hash: hashedPw,
+           name,
+           email,
+           age: age ? parseInt(age) : null
+        }])
         .select()
         .single();
 
@@ -52,14 +61,50 @@ export default function Signup({ setSession }: { setSession: (user: { userId: st
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="name">Full Name</Label>
               <Input 
-                id="username" 
-                placeholder="johndoe" 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                id="name" 
+                placeholder="John Doe" 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input 
+                id="email" 
+                type="email"
+                placeholder="john@example.com" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="age">Age</Label>
+                <Input 
+                  id="age" 
+                  type="number"
+                  min="1"
+                  max="120"
+                  placeholder="25" 
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input 
+                  id="username" 
+                  placeholder="johndoe" 
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>

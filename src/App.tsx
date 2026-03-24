@@ -31,7 +31,7 @@ export default function App() {
   };
 
   return (
-    <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+    <ThemeProvider defaultTheme="light" storageKey="todo-ui-theme">
       <BrowserRouter>
         <div className="min-h-screen bg-background relative overflow-hidden flex flex-col">
           <div className="absolute top-0 right-0 -mr-32 -mt-32 w-96 h-96 rounded-full bg-primary/20 blur-3xl pointer-events-none" />

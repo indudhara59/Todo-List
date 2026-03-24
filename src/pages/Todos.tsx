@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar, AlertCircle, Clock, PieChart as PieChartIcon } from "lucide-react";
+import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar, AlertCircle, Clock, PieChart as PieChartIcon, Edit2, Settings } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Todo = {
   todo_id: string;
@@ -30,6 +31,42 @@ export default function Todos({ session, setSession }: { session: { userId: stri
   const [loading, setLoading] = useState(false);
   const timeoutRefs = useRef<{ [key: string]: ReturnType<typeof setTimeout> }>({});
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const deleteAccount = async () => {
+    setLoading(true);
+    await supabase.from('Todos').delete().eq('user_id', session.userId);
+    const { error } = await supabase.from('Users').delete().eq('user_id', session.userId);
+    if (!error) {
+       setSession(null);
+    }
+    setLoading(false);
+  };
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editCategory, setEditCategory] = useState("Other");
+  const [editDueDate, setEditDueDate] = useState("");
+
+  const saveEdit = async (todo: Todo) => {
+    if (!editTitle.trim()) return;
+    setLoading(true);
+    const finalDueDate = editDueDate ? new Date(editDueDate).toISOString() : null;
+    const { error } = await supabase
+      .from('Todos')
+      .update({ title: editTitle, description: editDesc, category: editCategory, due_date: finalDueDate })
+      .eq('todo_id', todo.todo_id);
+    
+    if (!error) {
+      setTodos(todos.map(t => t.todo_id === todo.todo_id ? 
+        { ...t, title: editTitle, description: editDesc, category: editCategory, due_date: finalDueDate } : t
+      ));
+      setEditingId(null);
+    }
+    setLoading(false);
+  };
 
   const categoryData = CATEGORIES.map(cat => ({
     name: cat,
@@ -148,23 +185,47 @@ export default function Todos({ session, setSession }: { session: { userId: stri
   };
 
   return (
-    <div className="flex-1 flex flex-col p-4 md:p-8 max-w-4xl mx-auto w-full z-10 relative">
-      <header className="flex items-center justify-between mb-8 glass rounded-2xl p-4 shadow-lg border-border border">
+    <div className="flex-1 flex flex-col p-4 md:p-8 max-w-4xl mx-auto w-full z-10 relative overflow-hidden">
+      <motion.header 
+        initial={{ opacity: 0, y: -20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
+        className="flex items-center justify-between mb-8 glass rounded-2xl p-4 shadow-lg border-border border"
+      >
         <div className="flex items-center gap-2">
           <CheckCircle2 className="w-8 h-8 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/50 bg-clip-text text-transparent">DoIt</h1>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm font-medium text-muted-foreground">Hello, <strong className="text-foreground">{session.username}</strong></span>
-          <Button variant="ghost" size="sm" onClick={logout} className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive">
-            <LogOut className="w-4 h-4" />
-            Logout
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
+                <Settings className="w-4 h-4" />
+                Settings
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="glass border-border shadow-2xl min-w-[160px]">
+              <DropdownMenuItem onClick={logout} className="cursor-pointer text-foreground py-2 font-medium">
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive py-2 font-medium">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Account
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-      </header>
+      </motion.header>
 
       <div className="grid md:grid-cols-[300px_1fr] gap-6 flex-1 items-start">
-        <div className="flex flex-col gap-6 sticky top-4">
+        <motion.div 
+          initial={{ opacity: 0, x: -30 }} 
+          animate={{ opacity: 1, x: 0 }} 
+          transition={{ duration: 0.5, delay: 0.1, type: "spring", stiffness: 100 }}
+          className="flex flex-col gap-6 sticky top-4"
+        >
           <Card className="glass">
             <CardHeader>
               <CardTitle>New Task</CardTitle>
@@ -242,51 +303,62 @@ export default function Todos({ session, setSession }: { session: { userId: stri
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button type="submit" className="w-full gap-2 transition-transform active:scale-95" disabled={loading}>
-                  <Plus className="w-4 h-4" />
-                  Add Task
-                </Button>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.95 }}>
+                  <Button type="submit" className="w-full gap-2" disabled={loading}>
+                    <Plus className="w-4 h-4" />
+                    Add Task
+                  </Button>
+                </motion.div>
               </form>
             </CardContent>
           </Card>
           
-          {todos.length > 0 && categoryData.length > 0 && (
-            <Card className="glass sticky top-4">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-                  <PieChartIcon className="w-4 h-4 text-primary" />
-                  Category Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="h-[200px] flex items-center justify-center p-0 pb-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={70}
-                      paddingAngle={5}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {categoryData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="opacity-90 hover:opacity-100 transition-opacity drop-shadow-md" />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", backgroundColor: "hsl(var(--background)/0.8)", backdropFilter: "blur(12px)", color: "hsl(var(--foreground))" }} 
-                      itemStyle={{ color: "hsl(var(--foreground))", fontWeight: "bold" }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+          <AnimatePresence>
+            {todos.length > 0 && categoryData.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20, height: 0, overflow: "hidden" }} transition={{ delay: 0.1, duration: 0.3 }}>
+                <Card className="glass sticky top-4">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+                      <PieChartIcon className="w-4 h-4 text-primary" />
+                      Category Breakdown
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-[200px] flex items-center justify-center p-0 pb-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={categoryData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={45}
+                          outerRadius={70}
+                          paddingAngle={5}
+                          dataKey="value"
+                          stroke="none"
+                        >
+                          {categoryData.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="opacity-90 hover:opacity-100 transition-opacity drop-shadow-md" />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ borderRadius: "12px", border: "1px solid hsl(var(--border))", backgroundColor: "hsl(var(--background)/0.8)", backdropFilter: "blur(12px)", color: "hsl(var(--foreground))" }} 
+                          itemStyle={{ color: "hsl(var(--foreground))", fontWeight: "bold" }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
 
-        <div className="space-y-4">
+        <motion.div 
+          initial={{ opacity: 0, x: 30 }} 
+          animate={{ opacity: 1, x: 0 }} 
+          transition={{ duration: 0.5, delay: 0.2, type: "spring", stiffness: 100 }}
+          className="space-y-4 mt-2 md:mt-0"
+        >
           <div className="flex items-center justify-between glass rounded-xl p-3 border border-border">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <Filter className="w-4 h-4 text-muted-foreground" />
@@ -312,107 +384,256 @@ export default function Todos({ session, setSession }: { session: { userId: stri
             </DropdownMenu>
           </div>
 
-          {todos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center glass rounded-2xl border-border border h-64">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <CheckCircle2 className="w-8 h-8 text-primary/50" />
-              </div>
-              <h3 className="text-lg font-medium text-foreground mb-1">No tasks yet</h3>
-              <p className="text-muted-foreground text-sm">Add a task to get started on your journey.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-8 transition-all duration-300">
-              {(() => {
-                const filtered = todos.filter(t => filterCategory === "All" || t.category === filterCategory);
-                const overdueTodos = filtered.filter(t => t.due_date && new Date(t.due_date) < currentTime && !t.status);
-                const regularTodos = filtered.filter(t => !(t.due_date && new Date(t.due_date) < currentTime && !t.status));
+          <AnimatePresence mode="wait">
+            {todos.length === 0 ? (
+              <motion.div key="empty" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="flex flex-col items-center justify-center p-12 text-center glass rounded-2xl border-border border h-64">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <CheckCircle2 className="w-8 h-8 text-primary/50" />
+                </div>
+                <h3 className="text-lg font-medium text-foreground mb-1">No tasks yet</h3>
+                <p className="text-muted-foreground text-sm">Add a task to get started on your journey.</p>
+              </motion.div>
+            ) : (
+              <motion.div key="task-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-8">
+                {(() => {
+                  const filtered = todos.filter(t => filterCategory === "All" || t.category === filterCategory);
+                  const overdueTodos = filtered.filter(t => t.due_date && new Date(t.due_date) < currentTime && !t.status);
+                  const regularTodos = filtered.filter(t => !(t.due_date && new Date(t.due_date) < currentTime && !t.status));
 
-                const renderTodo = (todo: Todo) => {
-                  const isOverdue = todo.due_date && new Date(todo.due_date) < currentTime && !todo.status;
-                  return (
-                    <div key={todo.todo_id} className={`group flex items-start gap-3 p-4 glass rounded-xl border transition-all duration-500 ${
-                      todo.status ? 'bg-background/20 opacity-70 border-border' : isOverdue ? 'bg-destructive/10 border-destructive/40 hover:border-destructive/60' : 'border-border hover:border-primary/50'
-                    }`}>
-                      <div className="pt-0.5">
-                        <Checkbox 
-                          checked={todo.status}
-                          onCheckedChange={() => toggleTodo(todo.todo_id, todo.status)}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <h4 className={`font-medium text-[15px] truncate transition-all duration-200 ${todo.status ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                            {todo.title}
-                          </h4>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-primary/10 text-primary border border-primary/20">
-                            <Tag className="w-3 h-3 mr-1" />
-                            {todo.category || 'Other'}
-                          </span>
-                          {todo.due_date && (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border transition-all duration-500 ${
-                              isOverdue 
-                                ? 'bg-destructive/20 text-destructive border-destructive/30' 
-                                : 'bg-muted/50 text-muted-foreground border-border'
-                            }`}>
-                              <Calendar className="w-3 h-3 mr-1" />
-                              {new Date(todo.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                  const renderTodo = (todo: Todo) => {
+                    const isOverdue = todo.due_date && new Date(todo.due_date) < currentTime && !todo.status;
+                    const isEditing = editingId === todo.todo_id;
+
+                    if (isEditing) {
+                      return (
+                        <motion.div 
+                          layout 
+                          initial={{ opacity: 0, scale: 0.95 }} 
+                          animate={{ opacity: 1, scale: 1 }} 
+                          exit={{ opacity: 0, scale: 0.95, height: 0, margin: 0, overflow: 'hidden' }} 
+                          transition={{ duration: 0.2 }}
+                          key={`edit-${todo.todo_id}`} 
+                          className="p-4 glass rounded-xl border border-primary/50 transition-colors flex flex-col gap-3 relative z-20"
+                        >
+                          <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="bg-background/40 font-medium" placeholder="Task Title" />
+                          <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="bg-background/40 text-sm" placeholder="Task Details (optional)" />
+                          
+                          <div className="flex flex-wrap gap-2">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="bg-background/40 h-9 font-normal border-input text-xs shrink-0">
+                                  {editCategory}
+                                  <ChevronDown className="ml-2 h-3 w-3 opacity-50" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent className="glass shadow-xl">
+                                {CATEGORIES.map(cat => (
+                                  <DropdownMenuItem key={cat} onSelect={() => setEditCategory(cat)} className="cursor-pointer text-xs">{cat}</DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" type="button" className={`h-9 font-normal bg-background/40 border-input text-xs shrink-0 ${!editDueDate && "text-muted-foreground"}`}>
+                                  <Calendar className="mr-2 h-3 w-3 opacity-50" />
+                                  {editDueDate ? new Date(editDueDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : "Set due date & time"}
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent className="glass border-border shadow-xl p-3 flex flex-col gap-3 w-64">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Date</label>
+                                  <Input 
+                                    type="date"
+                                    value={editDueDate.includes('T') ? editDueDate.split('T')[0] : (editDueDate || "")}
+                                    onChange={(e) => {
+                                       const newDate = e.target.value;
+                                       if (!newDate) { setEditDueDate(""); return; }
+                                       const time = editDueDate.includes('T') ? editDueDate.split('T')[1] : "12:00";
+                                       setEditDueDate(`${newDate}T${time}`);
+                                    }}
+                                    className="h-8 bg-background/50 text-xs"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-muted-foreground">Time</label>
+                                  <Input 
+                                    type="time"
+                                    value={editDueDate.includes('T') ? editDueDate.split('T')[1] : "12:00"}
+                                    onChange={(e) => {
+                                       const newTime = e.target.value;
+                                       const date = editDueDate.includes('T') ? editDueDate.split('T')[0] : new Date().toISOString().split('T')[0];
+                                       setEditDueDate(`${date}T${newTime}`);
+                                    }}
+                                    className="h-8 bg-background/50 text-xs"
+                                  />
+                                </div>
+                                {editDueDate && (
+                                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditDueDate("")} className="h-8 text-destructive text-xs hover:bg-destructive/10 mt-1">
+                                    Clear Date
+                                  </Button>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 mt-1">
+                            <Button variant="ghost" size="sm" onClick={() => setEditingId(null)} className="h-8 text-xs hover:bg-muted/50">Cancel</Button>
+                            <Button size="sm" onClick={() => saveEdit(todo)} disabled={loading} className="h-8 text-xs">Save Changes</Button>
+                          </div>
+                        </motion.div>
+                      );
+                    }
+
+                    return (
+                      <motion.div 
+                        layout 
+                        initial={{ opacity: 0, y: 15, scale: 0.95 }} 
+                        animate={{ opacity: 1, y: 0, scale: 1 }} 
+                        exit={{ opacity: 0, scale: 0.9, height: 0, margin: 0, overflow: 'hidden' }} 
+                        transition={{ duration: 0.2, type: "spring", stiffness: 300, damping: 25 }} 
+                        key={todo.todo_id} 
+                        className={`group flex items-start gap-3 p-4 glass rounded-xl border transition-colors duration-500 overflow-hidden ${
+                          todo.status ? 'bg-background/20 opacity-70 border-border' : isOverdue ? 'bg-destructive/10 border-destructive/40 hover:border-destructive/60' : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <div className="pt-0.5 min-w-[20px]">
+                          <Checkbox 
+                            checked={todo.status}
+                            onCheckedChange={() => toggleTodo(todo.todo_id, todo.status)}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h4 className={`font-medium text-[15px] truncate transition-all duration-200 ${todo.status ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                              {todo.title}
+                            </h4>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-primary/10 text-primary border border-primary/20">
+                              <Tag className="w-3 h-3 mr-1" />
+                              {todo.category || 'Other'}
                             </span>
+                            {todo.due_date && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border transition-colors duration-500 ${
+                                isOverdue 
+                                  ? 'bg-destructive/20 text-destructive border-destructive/30' 
+                                  : 'bg-muted/50 text-muted-foreground border-border'
+                              }`}>
+                                <Calendar className="w-3 h-3 mr-1" />
+                                {new Date(todo.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                              </span>
+                            )}
+                          </div>
+                          {todo.description && (
+                            <p className={`text-sm mt-1 mb-0.5 line-clamp-2 transition-all ${todo.status ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground'}`}>
+                              {todo.description}
+                            </p>
                           )}
                         </div>
-                        {todo.description && (
-                          <p className={`text-sm mt-1 mb-0.5 line-clamp-2 transition-all ${todo.status ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground'}`}>
-                            {todo.description}
-                          </p>
-                        )}
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => deleteTodo(todo.todo_id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            type="button"
+                            className="text-muted-foreground hover:text-primary hover:bg-primary/10 shrink-0 h-8 w-8"
+                            onClick={() => {
+                              setEditingId(todo.todo_id);
+                              setEditTitle(todo.title);
+                              setEditDesc(todo.description || "");
+                              setEditCategory(todo.category || "Other");
+                              if (todo.due_date) {
+                                const d = new Date(todo.due_date);
+                                const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                                setEditDueDate(localIso);
+                              } else {
+                                setEditDueDate("");
+                              }
+                            }}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            type="button"
+                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 h-8 w-8"
+                            onClick={() => deleteTodo(todo.todo_id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </motion.div>
+                    );
+                  };
+
+                  return (
+                    <AnimatePresence mode="popLayout">
+                      {overdueTodos.length > 0 && (
+                        <motion.div layout key="overdue-section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0, overflow: 'hidden' }} className="space-y-3">
+                          <h3 className="text-xs font-bold text-destructive flex items-center gap-2 uppercase tracking-widest ml-1">
+                            <AlertCircle className="w-4 h-4" /> Overdue Tasks
+                          </h3>
+                          <div className="grid gap-3">
+                            <AnimatePresence mode="popLayout">
+                              {overdueTodos.map(renderTodo)}
+                            </AnimatePresence>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {regularTodos.length > 0 && (
+                        <motion.div layout key="regular-section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0, overflow: 'hidden' }} className="space-y-3">
+                          <h3 className="text-xs font-bold text-muted-foreground flex items-center gap-2 uppercase tracking-widest ml-1">
+                            <Clock className="w-4 h-4" /> Current Tasks
+                          </h3>
+                          <div className="grid gap-3">
+                            <AnimatePresence mode="popLayout">
+                              {regularTodos.map(renderTodo)}
+                            </AnimatePresence>
+                          </div>
+                        </motion.div>
+                      )}
+                      
+                      {filtered.length === 0 && todos.length > 0 && (
+                        <motion.div layout key="no-filter-match" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center p-8 text-muted-foreground text-sm glass rounded-xl border border-border">
+                          No tasks match the selected filter.
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   );
-                };
-
-                return (
-                  <>
-                    {overdueTodos.length > 0 && (
-                      <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-destructive flex items-center gap-2 uppercase tracking-widest ml-1">
-                          <AlertCircle className="w-4 h-4" /> Overdue Tasks
-                        </h3>
-                        <div className="grid gap-3">
-                          {overdueTodos.map(renderTodo)}
-                        </div>
-                      </div>
-                    )}
-
-                    {regularTodos.length > 0 && (
-                      <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-muted-foreground flex items-center gap-2 uppercase tracking-widest ml-1">
-                          <Clock className="w-4 h-4" /> Current Tasks
-                        </h3>
-                        <div className="grid gap-3">
-                          {regularTodos.map(renderTodo)}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {filtered.length === 0 && todos.length > 0 && (
-                      <div className="text-center p-8 text-muted-foreground text-sm glass rounded-xl border border-border">
-                        No tasks match the selected filter.
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
-        </div>
+                })()}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </div>
+
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }} 
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="glass p-6 rounded-2xl max-w-sm w-full border border-destructive/20 shadow-2xl flex flex-col items-center text-center relative z-[101]"
+            >
+              <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4 text-destructive">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-xl font-bold text-destructive mb-2 tracking-tight">Delete Account?</h3>
+              <p className="text-sm text-foreground/80 mb-6 font-medium">
+                Are you absolutely sure? This action is permanent and cannot be undone. All your tasks will be permanently erased.
+              </p>
+              <div className="flex w-full gap-3 justify-center">
+                 <Button variant="outline" className="flex-1 bg-background/50 border-input" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+                 <Button variant="destructive" className="flex-1" onClick={deleteAccount} disabled={loading}>
+                   {loading ? "Deleting..." : "Yes, Delete"}
+                 </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
