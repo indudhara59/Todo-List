@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { LogOut, Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { LogOut, Plus, Trash2, CheckCircle2, Tag, Filter, ChevronDown, Calendar } from "lucide-react";
 
 type Todo = {
   todo_id: string;
@@ -12,12 +13,19 @@ type Todo = {
   description: string | null;
   status: boolean;
   created_at: string;
+  category: string;
+  due_date: string | null;
 };
+
+const CATEGORIES = ["Other", "Personal", "Work", "Shopping", "Food & Expense", "Health"];
 
 export default function Todos({ session, setSession }: { session: { userId: string; username: string }; setSession: (session: null) => void }) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newCategory, setNewCategory] = useState("Other");
+  const [newDueDate, setNewDueDate] = useState("");
+  const [filterCategory, setFilterCategory] = useState("All");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -43,13 +51,15 @@ export default function Todos({ session, setSession }: { session: { userId: stri
     setLoading(true);
     const { data, error } = await supabase
       .from('Todos')
-      .insert([{ user_id: session.userId, title: newTitle, description: newDesc }])
+      .insert([{ user_id: session.userId, title: newTitle, description: newDesc, category: newCategory, due_date: newDueDate || null }])
       .select();
 
     if (!error && data) {
       setTodos([data[0], ...todos]);
       setNewTitle("");
       setNewDesc("");
+      setNewCategory("Other");
+      setNewDueDate("");
     }
     setLoading(false);
   };
@@ -118,6 +128,63 @@ export default function Todos({ session, setSession }: { session: { userId: stri
                   onChange={(e) => setNewDesc(e.target.value)}
                   className="bg-background/40 text-sm"
                 />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between bg-background/40 font-normal border-input">
+                      {newCategory}
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] glass border-border shadow-xl">
+                    {CATEGORIES.map(cat => (
+                      <DropdownMenuItem key={cat} onSelect={() => setNewCategory(cat)} className="cursor-pointer">
+                        {cat}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" type="button" className={`w-full justify-start text-left font-normal bg-background/40 border-input ${!newDueDate && "text-muted-foreground"}`}>
+                      <Calendar className="mr-2 h-4 w-4 opacity-50" />
+                      {newDueDate ? new Date(newDueDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : "Set due date & time (optional)"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] glass border-border shadow-xl p-3 flex flex-col gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Date</label>
+                      <Input 
+                        type="date"
+                        value={newDueDate.includes('T') ? newDueDate.split('T')[0] : (newDueDate || "")}
+                        onChange={(e) => {
+                           const newDate = e.target.value;
+                           if (!newDate) { setNewDueDate(""); return; }
+                           const time = newDueDate.includes('T') ? newDueDate.split('T')[1] : "12:00";
+                           setNewDueDate(`${newDate}T${time}`);
+                        }}
+                        className="h-8 bg-background/50"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Time</label>
+                      <Input 
+                        type="time"
+                        value={newDueDate.includes('T') ? newDueDate.split('T')[1] : "12:00"}
+                        onChange={(e) => {
+                           const newTime = e.target.value;
+                           const date = newDueDate.includes('T') ? newDueDate.split('T')[0] : new Date().toISOString().split('T')[0];
+                           setNewDueDate(`${date}T${newTime}`);
+                        }}
+                        className="h-8 bg-background/50"
+                      />
+                    </div>
+                    {newDueDate && (
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setNewDueDate("")} className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10 mt-1">
+                        Clear Date
+                      </Button>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button type="submit" className="w-full gap-2 transition-transform active:scale-95" disabled={loading}>
                   <Plus className="w-4 h-4" />
                   Add Task
@@ -128,6 +195,31 @@ export default function Todos({ session, setSession }: { session: { userId: stri
         </div>
 
         <div className="space-y-4">
+          <div className="flex items-center justify-between glass rounded-xl p-3 border border-border">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              Filter by Category
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 bg-background/40 font-normal gap-2 border-input whitespace-nowrap min-w-[140px] justify-between">
+                  {filterCategory === "All" ? "All Categories" : filterCategory}
+                  <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="glass border-border shadow-xl min-w-[140px]">
+                <DropdownMenuItem onSelect={() => setFilterCategory("All")} className="cursor-pointer">
+                  All Categories
+                </DropdownMenuItem>
+                {CATEGORIES.map(cat => (
+                  <DropdownMenuItem key={cat} onSelect={() => setFilterCategory(cat)} className="cursor-pointer">
+                    {cat}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           {todos.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center glass rounded-2xl border-border border h-64">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
@@ -138,7 +230,9 @@ export default function Todos({ session, setSession }: { session: { userId: stri
             </div>
           ) : (
             <div className="grid gap-3 transition-all duration-300">
-              {todos.map(todo => (
+              {todos
+                .filter(t => filterCategory === "All" || t.category === filterCategory)
+                .map(todo => (
                 <div key={todo.todo_id} className={`group flex items-start gap-3 p-4 glass rounded-xl border border-border transition-all duration-300 hover:border-primary/50 ${todo.status ? 'bg-background/20 opacity-70' : ''}`}>
                   <div className="pt-0.5">
                     <Checkbox 
@@ -147,9 +241,25 @@ export default function Todos({ session, setSession }: { session: { userId: stri
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className={`font-medium text-[15px] truncate transition-all duration-200 ${todo.status ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                      {todo.title}
-                    </h4>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h4 className={`font-medium text-[15px] truncate transition-all duration-200 ${todo.status ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                        {todo.title}
+                      </h4>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold bg-primary/10 text-primary border border-primary/20">
+                        <Tag className="w-3 h-3 mr-1" />
+                        {todo.category || 'Other'}
+                      </span>
+                      {todo.due_date && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-semibold border ${
+                          new Date(todo.due_date) < new Date() && !todo.status 
+                            ? 'bg-destructive/10 text-destructive border-destructive/20' 
+                            : 'bg-muted/50 text-muted-foreground border-border'
+                        }`}>
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {new Date(todo.due_date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        </span>
+                      )}
+                    </div>
                     {todo.description && (
                       <p className={`text-sm mt-1 mb-0.5 line-clamp-2 transition-all ${todo.status ? 'text-muted-foreground/60 line-through' : 'text-muted-foreground'}`}>
                         {todo.description}
